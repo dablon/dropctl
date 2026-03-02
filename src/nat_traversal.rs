@@ -12,18 +12,19 @@ use {
     tokio::net::UdpSocket,
     tokio::sync::Mutex,
     tokio::time::{timeout, Duration},
-    tracing::{info, warn, error},
+    tracing::{info, warn},
 };
 
-/// STUN server addresses (public, free to use)
+/// STUN server addresses (public, free to use) - IPv4 only
 const STUN_SERVERS: &[&str] = &[
-    "stun.l.google.com:19302",
-    "stun1.l.google.com:19302",
-    "stun.stunprotocol.org:3478",
+    "74.125.45.100:19302",   // stun.l.google.com
+    "142.250.1.127:19302",   // stun1.l.google.com  
+    "64.233.177.127:19302",  // Another Google STUN
+    "173.194.76.127:19302",  // Google STUN
 ];
 
 /// Public STUN server for NAT discovery
-const DEFAULT_STUN: &str = "stun.l.google.com:19302";
+const DEFAULT_STUN: &str = "74.125.45.100:19302";
 
 /// TURN server configuration
 #[derive(Clone, Debug)]
@@ -152,15 +153,11 @@ impl NatClient {
     
     /// Query a single STUN server
     async fn query_stun(&self, socket: &UdpSocket, stun_addr: &str) -> Result<SocketAddr> {
-        // Resolve hostname to SocketAddr
-        let addrs: Vec<SocketAddr> = (stun_addr, 0).to_socket_addrs()
-            .context("Failed to resolve STUN server")?
-            .collect();
+        // Parse IP:port directly - don't use to_socket_addrs which may fail on IPs
+        let addr: SocketAddr = stun_addr.parse()
+            .context("Invalid STUN address format")?;
         
-        let addr = addrs.into_iter().next()
-            .context("No addresses for STUN server")?;
-        
-        // Build STUN binding request (RFC 5389)
+        info!("Querying STUN server: {}", addr);
         // STUN header: 0x0001 (Binding Request), transaction ID (96 bits)
         let mut request = vec![
             0x00, 0x01,  // Message Type: Binding Request
