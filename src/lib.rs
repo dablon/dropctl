@@ -7,10 +7,12 @@ pub mod crypto;
 pub mod protocol;
 pub mod transfer;
 pub mod config;
+pub mod nat_traversal;
 
 pub use crypto::{KeyPair, load_or_generate_keypair, KnownHost};
 pub use crypto::session::{handshake_initiator, handshake_responder, SecureSession};
 pub use protocol::{Message, Handshake};
+pub use nat_traversal::{NatClient, NatInfo, NatType, NatExchange, TurnConfig, ConnectionMethod};
 
 #[cfg(test)]
 mod tests {

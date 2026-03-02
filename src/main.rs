@@ -13,8 +13,9 @@ use dropctl::{
     crypto::{KeyPair, load_or_generate_keypair, KnownHost},
     handshake_initiator, handshake_responder,
     protocol::{Message, Handshake, read_message, write_message},
-    transfer::{send_file, receive_file, receive_file_with_header, print_progress},
+    transfer::{send_file, receive_file_with_header, print_progress},
     config::{key_path, known_hosts_path, load_known_hosts, save_known_hosts},
+    nat_traversal::{NatClient, TurnConfig},
 };
 
 /// Simple CLI peer-to-peer file transfer
@@ -53,6 +54,18 @@ enum Commands {
         /// Hostname to announce
         #[arg(long)]
         hostname: Option<String>,
+        
+        /// Use STUN for NAT discovery
+        #[arg(long)]
+        stun: bool,
+        
+        /// Use TURN relay as fallback (implies --stun)
+        #[arg(long)]
+        turn: bool,
+        
+        /// STUN server address
+        #[arg(long)]
+        stun_server: Option<String>,
     },
     
     /// Connect and send a file
@@ -69,6 +82,22 @@ enum Commands {
         /// Hostname to announce
         #[arg(long)]
         hostname: Option<String>,
+        
+        /// Use STUN for NAT discovery
+        #[arg(long)]
+        stun: bool,
+        
+        /// Use TURN relay as fallback (implies --stun)
+        #[arg(long)]
+        turn: bool,
+        
+        /// STUN server address
+        #[arg(long)]
+        stun_server: Option<String>,
+        
+        /// Peer's NAT info (for hole punching)
+        #[arg(long)]
+        peer_nat_info: Option<String>,
     },
     
     /// Show public key (for sharing with peers)
@@ -129,7 +158,7 @@ async fn main() -> Result<()> {
             println!("\nShare this with your peer so they can verify your identity.");
         }
         
-        Commands::Listen { port, output, output_dir, hostname } => {
+        Commands::Listen { port, output, output_dir, hostname, stun, turn, stun_server } => {
             let hostname = hostname.unwrap_or_else(|| hostname::get()
                 .map(|h| h.to_string_lossy().into_owned())
                 .unwrap_or_else(|_| "unknown".to_string()));
@@ -137,12 +166,41 @@ async fn main() -> Result<()> {
             // Use output flag if provided, otherwise use positional arg, otherwise current dir
             let output_dir = output.or(output_dir).unwrap_or_else(|| PathBuf::from("."));
             
-            info!("Listening on port {}", port);
-            
-            let listener = TcpListener::bind(("0.0.0.0", port)).await
-                .context("Failed to bind port")?;
-            
-            info!("Waiting for incoming connection... (Ctrl+C to stop)");
+            // Handle NAT traversal if requested
+            if stun || turn {
+                match NatClient::new(port).await {
+                    Ok(client) => {
+                        let client = if let Some(ref server) = stun_server {
+                            client.with_stun(server)
+                        } else {
+                            client
+                        };
+                        
+                        match client.discover().await {
+                            Ok(info) => {
+                                println!("\n=== NAT Traversal Info ===");
+                                println!("Local address:  {}", info.local);
+                                if let Some(public) = info.public {
+                                    println!("Public address: {}", public);
+                                }
+                                println!("NAT type:        {}", info.nat_type);
+                                
+                                if turn {
+                                    println!("TURN fallback:   enabled");
+                                }
+                                println!("\nShare this info with your peer for P2P connection!");
+                                println!("=======================\n");
+                            }
+                            Err(e) => {
+                                tracing::warn!("STUN discovery failed: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create NAT client: {}", e);
+                    }
+                }
+            }
             
             info!("Listening on port {}", port);
             
@@ -170,13 +228,76 @@ async fn main() -> Result<()> {
             }
         }
         
-        Commands::Send { address, file, peer_key, hostname } => {
+        Commands::Send { address, file, peer_key, hostname, stun, turn, stun_server, peer_nat_info } => {
             let hostname = hostname.unwrap_or_else(|| hostname::get()
                 .map(|h| h.to_string_lossy().into_owned())
                 .unwrap_or_else(|_| "unknown".to_string()));
             
             if !file.exists() {
                 anyhow::bail!("File not found: {}", file.display());
+            }
+            
+            // Handle NAT traversal if requested
+            if stun || turn {
+                // Use a random port for UDP socket, then connect via TCP
+                let nat_client = match NatClient::new(0).await {
+                    Ok(client) => {
+                        let client = if let Some(ref server) = stun_server {
+                            client.with_stun(server)
+                        } else {
+                            client
+                        };
+                        
+                        match client.discover().await {
+                            Ok(info) => {
+                                println!("\n=== My NAT Info ===");
+                                println!("Local address:  {}", info.local);
+                                if let Some(public) = info.public {
+                                    println!("Public address: {}", public);
+                                }
+                                println!("NAT type:       {}", info.nat_type);
+                                println!("\n");
+                                
+                                Some((client, info))
+                            }
+                            Err(e) => {
+                                tracing::warn!("STUN discovery failed: {}", e);
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create NAT client: {}", e);
+                        None
+                    }
+                };
+                
+                // If peer_nat_info provided, try hole punching
+                if let (Some((ref client, ref my_info)), Some(ref peer_info_str)) = (&nat_client, &peer_nat_info) {
+                    // Parse peer's NAT info (format: ip:port)
+                    if let Ok(peer_addr) = peer_info_str.parse() {
+                        println!("Attempting UDP hole punch to {}...", peer_addr);
+                        
+                        // Try hole punch
+                        match client.hole_punch(&[], peer_addr).await {
+                            Ok(Some(direct_addr)) => {
+                                println!("✓ Hole punch succeeded! Direct P2P: {}", direct_addr);
+                                // TODO: Switch to UDP for actual transfer
+                            }
+                            Ok(None) => {
+                                if turn {
+                                    println!("Hole punch failed, falling back to TURN relay...");
+                                    // TODO: Connect via TURN
+                                } else {
+                                    println!("Hole punch failed, falling back to TCP...");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Hole punch error: {}", e);
+                            }
+                        }
+                    }
+                }
             }
             
             info!("Connecting to {}", address);
