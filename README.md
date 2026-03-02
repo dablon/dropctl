@@ -157,6 +157,34 @@ Share this with your peer so they can verify your identity.
   --peer-key "receiver_public_key_here"
 ```
 
+### Behind Firewall (SSH Tunnel) - RECOMMENDED
+
+If you're behind a firewall or NAT, use an SSH tunnel:
+
+```bash
+# On your local machine, create SSH tunnel:
+ssh -L 7777:localhost:7777 -N user@remote-server
+
+# Now use dropctl through the tunnel:
+./dropctl send localhost:7777 large_file.zip
+```
+
+### Alternative: Using a Relay Server
+
+If SSH tunnel is not available, use a relay service:
+
+```bash
+# Option 1: Serveo.net (free, no setup)
+# On remote server:
+ssh -R 7777:localhost:7777 serveo.net
+
+# Option 2: Using a public relay (requires setup)
+# See examples/ folder for relay server code
+
+# Option 3: Open port on router/firewall
+# Port forward 7777 TCP to your machine
+```
+
 ### Custom Port
 
 ```bash

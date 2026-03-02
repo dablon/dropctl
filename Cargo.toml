@@ -3,7 +3,7 @@ name = "dropctl"
 version = "0.1.0"
 edition = "2021"
 authors = ["Nicolas <nicolasalca@hotmail.com>"]
-description = "Secure peer-to-peer file transfer"
+description = "Secure peer-to-peer file transfer with NAT traversal"
 
 [[bin]]
 name = "dropctl"
@@ -16,7 +16,6 @@ path = "src/lib.rs"
 [dependencies]
 # CLI
 clap = { version = "4.5", features = ["derive"] }
-clap_complete = "4.5"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -38,6 +37,10 @@ serde_json = "1.0"
 # Utils
 hostname = "0.4"
 
+# WebSocket for relay (alternative to direct connection)
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+
 [dev-dependencies]
 tempfile = "3.10"
 
@@ -45,6 +48,3 @@ tempfile = "3.10"
 lto = true
 codegen-units = 1
 strip = true
-
-[profile.test]
-incremental = false

@@ -22,6 +22,17 @@ pub struct KeyPair {
     pub verifying: VerifyingKey,
 }
 
+impl Clone for KeyPair {
+    fn clone(&self) -> Self {
+        Self {
+            signing: SigningKey::from_bytes(&self.signing.to_bytes()),
+            x25519_secret: StaticSecret::from(self.x25519_secret.to_bytes()),
+            x25519_public: X25519Public::from(&self.x25519_secret),
+            verifying: self.verifying,
+        }
+    }
+}
+
 impl KeyPair {
     /// Generate a new random keypair
     pub fn generate() -> Self {

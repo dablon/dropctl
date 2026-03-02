@@ -142,14 +142,32 @@ async fn main() -> Result<()> {
             let listener = TcpListener::bind(("0.0.0.0", port)).await
                 .context("Failed to bind port")?;
             
-            info!("Waiting for incoming connection...");
+            info!("Waiting for incoming connection... (Ctrl+C to stop)");
             
-            let (socket, addr) = listener.accept().await
-                .context("Failed to accept connection")?;
+            info!("Listening on port {}", port);
             
-            info!("Accepted connection from {}", addr);
+            let listener = TcpListener::bind(("0.0.0.0", port)).await
+                .context("Failed to bind port")?;
             
-            handle_listen(socket, keypair, hostname, output_dir).await?;
+            info!("Waiting for incoming connection... (Ctrl+C to stop)");
+            
+            // Accept multiple connections in a loop (sequential)
+            loop {
+                match listener.accept().await {
+                    Ok((socket, addr)) => {
+                        info!("Accepted connection from {}", addr);
+                        
+                        // Handle connection - blocks until done
+                        match handle_listen(socket, keypair.clone(), hostname.clone(), output_dir.clone()).await {
+                            Ok(_) => info!("Transfer completed successfully"),
+                            Err(e) => tracing::error!("Transfer failed: {}", e),
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to accept connection: {}", e);
+                    }
+                }
+            }
         }
         
         Commands::Send { address, file, peer_key, hostname } => {
