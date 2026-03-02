@@ -42,9 +42,13 @@ enum Commands {
         #[arg(default_value = "7777")]
         port: u16,
         
-        /// Output directory for received file
+        /// Output directory for received file (default: current dir)
         #[arg(short, long)]
         output: Option<PathBuf>,
+        
+        /// Output directory (positional argument)
+        #[arg(default_value = ".")]
+        output_dir: Option<PathBuf>,
         
         /// Hostname to announce
         #[arg(long)]
@@ -125,12 +129,13 @@ async fn main() -> Result<()> {
             println!("\nShare this with your peer so they can verify your identity.");
         }
         
-        Commands::Listen { port, output, hostname } => {
+        Commands::Listen { port, output, output_dir, hostname } => {
             let hostname = hostname.unwrap_or_else(|| hostname::get()
                 .map(|h| h.to_string_lossy().into_owned())
                 .unwrap_or_else(|_| "unknown".to_string()));
             
-            let output_dir = output.unwrap_or_else(|| PathBuf::from("."));
+            // Use output flag if provided, otherwise use positional arg, otherwise current dir
+            let output_dir = output.or(output_dir).unwrap_or_else(|| PathBuf::from("."));
             
             info!("Listening on port {}", port);
             
