@@ -40,3 +40,11 @@ hostname = "0.4"
 
 [dev-dependencies]
 tempfile = "3.10"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.test]
+incremental = false

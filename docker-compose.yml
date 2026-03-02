@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Unit tests
+  test:
+    build: .
+    command: cargo test --lib
+    volumes:
+      - .:/app
+    working_dir: /app
+
+  # E2E tests
+  e2e:
+    build: .
+    command: cargo test --test e2e_test
+    volumes:
+      - .:/app
+    working_dir: /app
+    network_mode: host
+    depends_on:
+      - test
+
+  # Coverage
+  coverage:
+    build: .
+    command: cargo tarpaulin --out Html --output-dir coverage
+    volumes:
+      - .:/app
+      - ./coverage:/app/coverage
+    working_dir: /app
+
+  # Full test suite
+  test-all:
+    build: .
+    command: sh -c "cargo test --lib && cargo test --test e2e_test"
+    volumes:
+      - .:/app
+    working_dir: /app
+    network_mode: host
+
+  # Development shell
+  dev:
+    build: .
+    command: /bin/sh
+    volumes:
+      - .:/app
+    working_dir: /app
+    tty: true
