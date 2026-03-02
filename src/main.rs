@@ -103,6 +103,25 @@ enum Commands {
     /// Show public key (for sharing with peers)
     ShowKey,
     
+    /// Upload file to public transfer service (works through firewalls)
+    Upload {
+        /// File to upload
+        file: PathBuf,
+        
+        /// Service: transfer.sh, file.io, 0x0.st (default: transfer.sh)
+        #[arg(long, default_value = "transfer.sh")]
+        service: Option<String>,
+    },
+    
+    /// Download file from URL
+    Download {
+        /// URL to download
+        url: String,
+        
+        /// Output filename (optional)
+        output: Option<PathBuf>,
+    },
+    
     /// Manage known hosts
     KnownHosts {
         #[command(subcommand)]
@@ -156,6 +175,73 @@ async fn main() -> Result<()> {
             println!("Your public key:");
             println!("{}", keypair.serialize_public());
             println!("\nShare this with your peer so they can verify your identity.");
+        }
+        
+        Commands::Upload { file, service } => {
+            if !file.exists() {
+                anyhow::bail!("File not found: {}", file.display());
+            }
+            
+            let service = service.unwrap_or_else(|| "transfer.sh".to_string());
+            
+            println!("Uploading {} to {}...", file.display(), service);
+            
+            // Upload using curl
+            let output = std::process::Command::new("curl")
+                .args([
+                    "-s", "-F", &format!("file=@{}", file.display()),
+                    match service.as_str() {
+                        "file.io" => "https://file.io",
+                        "0x0.st" => "https://0x0.st",
+                        _ => "https://transfer.sh",
+                    }
+                ])
+                .output()
+                .context("Failed to run curl")?;
+            
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            
+            if output.status.success() {
+                // Extract URL from response
+                let url = if service == "file.io" {
+                    serde_json::from_str::<serde_json::Value>(&output_str)
+                        .ok()
+                        .and_then(|v| {
+                            v.get("link")
+                                .and_then(|l| l.as_str())
+                                .map(|s| s.to_string())
+                        })
+                } else {
+                    Some(output_str.trim().to_string())
+                };
+                
+                if let Some(url) = url {
+                    println!("✓ Uploaded: {}", url);
+                } else {
+                    println!("✓ Uploaded: {}", output_str.trim());
+                }
+            } else {
+                anyhow::bail!("Upload failed: {}", String::from_utf8_lossy(&output.stderr));
+            }
+        }
+        
+        Commands::Download { url, output } => {
+            let output_path = output.unwrap_or_else(|| {
+                PathBuf::from(url.split('/').last().unwrap_or("downloaded_file"))
+            });
+            
+            println!("Downloading {} to {}...", url, output_path.display());
+            
+            let output = std::process::Command::new("curl")
+                .args(["-L", "-o", output_path.to_str().unwrap(), &url])
+                .output()
+                .context("Failed to run curl")?;
+            
+            if output.status.success() {
+                println!("✓ Downloaded: {}", output_path.display());
+            } else {
+                anyhow::bail!("Download failed: {}", String::from_utf8_lossy(&output.stderr));
+            }
         }
         
         Commands::Listen { port, output, output_dir, hostname, stun, turn, stun_server } => {
