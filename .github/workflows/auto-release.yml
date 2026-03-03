@@ -1,0 +1,67 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_OUTPUT
+
+      - name: Create tag
+        id: tag
+        run: |
+          TAG="v$(echo ${{ steps.date.outputs.date }})"
+          git tag $TAG
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Created tag: $TAG"
+
+      - name: Push tag
+        run: git push origin ${{ steps.tag.outputs.tag }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: |
+          cargo build --release
+          strip target/release/dropctl
+
+      - name: Create checksums
+        run: sha256sum target/release/dropctl > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: dropctl ${{ steps.tag.outputs.tag }}
+          body: |
+            ## dropctl ${{ steps.tag.outputs.tag }}
+            
+            Automatic release from commit `${{ github.sha }}`
+            
+            ### Usage
+            ```bash
+            # Listen for files
+            ./dropctl listen 7777
+            
+            # Send file
+            ./dropctl send 192.168.1.100:7777 file.zip
+            ```
+            
+            ### Checksums
+            ```
+            $(cat checksums.txt)
+            ```
+          files: |
+            target/release/dropctl
+            checksums.txt
