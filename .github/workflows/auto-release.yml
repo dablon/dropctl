@@ -1,12 +1,25 @@
-name: Auto Release
+name: Build & Release
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --lib
+      - run: cargo build
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -61,17 +74,12 @@ jobs:
       - name: Checksum Windows
         run: sha256sum target/x86_64-pc-windows-gnu/release/dropctl.exe > dropctl-windows-x86_64.txt
 
-      - name: Rename Linux
-        run: mv target/x86_64-unknown-linux-gnu/release/dropctl dropctl-linux-x86_64
-
-      - name: Rename macOS x86_64
-        run: mv target/x86_64-apple-darwin/release/dropctl dropctl-macos-x86_64
-
-      - name: Rename macOS ARM64
-        run: mv target/aarch64-apple-darwin/release/dropctl dropctl-macos-arm64
-
-      - name: Rename Windows
-        run: mv target/x86_64-pc-windows-gnu/release/dropctl.exe dropctl-windows-x86_64.exe
+      - name: Rename files
+        run: |
+          mv target/x86_64-unknown-linux-gnu/release/dropctl dropctl-linux-x86_64
+          mv target/x86_64-apple-darwin/release/dropctl dropctl-macos-x86_64
+          mv target/aarch64-apple-darwin/release/dropctl dropctl-macos-arm64
+          mv target/x86_64-pc-windows-gnu/release/dropctl.exe dropctl-windows-x86_64.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -90,16 +98,6 @@ jobs:
             | macOS x86_64 | dropctl-macos-x86_64 |
             | macOS ARM64 | dropctl-macos-arm64 |
             | Windows x86_64 | dropctl-windows-x86_64.exe |
-            
-            ### Usage
-            ```bash
-            # Linux/macOS
-            chmod +x dropctl-linux-x86_64
-            ./dropctl listen 7777
-            
-            # Windows
-            dropctl-windows-x86_64.exe listen 7777
-            ```
             
             ### Checksums
             ```
