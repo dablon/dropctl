@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: |
+          cargo build --release
+          # Strip binary for smaller size
+          strip target/release/dropctl
+
+      - name: Create SHA256 checksums
+        run: |
+          sha256sum target/release/dropctl > checksums.txt
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version: $VERSION"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: dropctl v${{ steps.version.outputs.version }}
+          body: |
+            ## dropctl v${{ steps.version.outputs.version }}
+            
+            Secure peer-to-peer file transfer CLI tool.
+            
+            ### Features
+            - 🔐 Military-grade encryption (X25519 + ChaCha20-Poly1305)
+            - 🚀 Blazing fast - Zero overhead
+            - 📦 Single binary - No dependencies
+            - 🌐 P2P - Direct host-to-host transfer
+            
+            ### Usage
+            ```bash
+            # Listen for incoming files
+            ./dropctl listen 7777
+            
+            # Send a file
+            ./dropctl send 192.168.1.100:7777 file.zip
+            ```
+            
+            ### Checksums
+            ```
+            $(cat checksums.txt)
+            ```
+          draft: false
+          prerelease: false
+          files: |
+            target/release/dropctl
+            checksums.txt
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/release/dropctl
+            checksums.txt
