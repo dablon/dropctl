@@ -359,7 +359,7 @@ async fn main() -> Result<()> {
                 };
                 
                 // If peer_nat_info provided, try hole punching
-                if let (Some((ref client, ref my_info)), Some(ref peer_info_str)) = (&nat_client, &peer_nat_info) {
+                if let (Some((ref client, ref _my_info)), Some(ref peer_info_str)) = (&nat_client, &peer_nat_info) {
                     // Parse peer's NAT info (format: ip:port)
                     if let Ok(peer_addr) = peer_info_str.parse() {
                         println!("Attempting UDP hole punch to {}...", peer_addr);

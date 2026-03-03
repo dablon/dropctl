@@ -9,10 +9,6 @@ description = "Secure peer-to-peer file transfer with NAT traversal"
 name = "dropctl"
 path = "src/main.rs"
 
-[[bin]]
-name = "dropctl-relay"
-path = "examples/relay.rs"
-
 [lib]
 name = "dropctl"
 path = "src/lib.rs"
