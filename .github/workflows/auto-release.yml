@@ -18,12 +18,76 @@ jobs:
       - run: cargo test --lib
       - run: cargo build
 
-  release:
+  build-linux:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked
+      - run: strip target/release/dropctl
+      - run: sha256sum target/release/dropctl > dropctl-linux-x86_64.txt
+      - run: mv target/release/dropctl dropctl-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropctl-linux
+          path: |
+            dropctl-linux-x86_64
+            dropctl-linux-x86_64.txt
+
+  build-macos-x86:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked
+      - run: sha256sum target/release/dropctl > dropctl-macos-x86_64.txt
+      - run: mv target/release/dropctl dropctl-macos-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropctl-macos-x86_64
+          path: |
+            dropctl-macos-x86_64
+            dropctl-macos-x86_64.txt
+
+  build-macos-arm:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked --target aarch64-apple-darwin
+      - run: sha256sum target/aarch64-apple-darwin/release/dropctl > dropctl-macos-arm64.txt
+      - run: mv target/aarch64-apple-darwin/release/dropctl dropctl-macos-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropctl-macos-arm64
+          path: |
+            dropctl-macos-arm64
+            dropctl-macos-arm64.txt
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked --target x86_64-pc-windows-gnu
+      - run: sha256sum target/x86_64-pc-windows-gnu/release/dropctl.exe > dropctl-windows-x86_64.txt
+      - run: mv target/x86_64-pc-windows-gnu/release/dropctl.exe dropctl-windows-x86_64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dropctl-windows-x86_64
+          path: |
+            dropctl-windows-x86_64.exe
+            dropctl-windows-x86_64.txt
+
+  release:
+    needs: [build-linux, build-macos-x86, build-macos-arm, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,46 +104,10 @@ jobs:
           git tag ${{ steps.version.outputs.version }}
           git push origin ${{ steps.version.outputs.version }}
 
-      - name: Build Linux
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
-          targets: x86_64-unknown-linux-gnu
-      - run: cargo build --release --locked --target x86_64-unknown-linux-gnu
-        env:
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_STRIP: strip
-      - name: Checksum Linux
-        run: sha256sum target/x86_64-unknown-linux-gnu/release/dropctl > dropctl-linux-x86_64.txt
-
-      - name: Build macOS x86_64
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-      - run: cargo build --release --locked --target x86_64-apple-darwin
-      - name: Checksum macOS x86_64
-        run: sha256sum target/x86_64-apple-darwin/release/dropctl > dropctl-macos-x86_64.txt
-
-      - name: Build macOS ARM64
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-      - run: cargo build --release --locked --target aarch64-apple-darwin
-      - name: Checksum macOS ARM64
-        run: sha256sum target/aarch64-apple-darwin/release/dropctl > dropctl-macos-arm64.txt
-
-      - name: Build Windows
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-      - run: cargo build --release --locked --target x86_64-pc-windows-gnu
-      - name: Checksum Windows
-        run: sha256sum target/x86_64-pc-windows-gnu/release/dropctl.exe > dropctl-windows-x86_64.txt
-
-      - name: Rename files
-        run: |
-          mv target/x86_64-unknown-linux-gnu/release/dropctl dropctl-linux-x86_64
-          mv target/x86_64-apple-darwin/release/dropctl dropctl-macos-x86_64
-          mv target/aarch64-apple-darwin/release/dropctl dropctl-macos-arm64
-          mv target/x86_64-pc-windows-gnu/release/dropctl.exe dropctl-windows-x86_64.exe
+          path: artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -101,17 +129,13 @@ jobs:
             
             ### Checksums
             ```
-            $(cat dropctl-linux-x86_64.txt)
-            $(cat dropctl-macos-x86_64.txt)
-            $(cat dropctl-macos-arm64.txt)
-            $(cat dropctl-windows-x86_64.txt)
+            $(cat artifacts/dropctl-linux/dropctl-linux-x86_64.txt)
+            $(cat artifacts/dropctl-macos-x86_64/dropctl-macos-x86_64.txt)
+            $(cat artifacts/dropctl-macos-arm64/dropctl-macos-arm64.txt)
+            $(cat artifacts/dropctl-windows-x86_64/dropctl-windows-x86_64.txt)
             ```
           files: |
-            dropctl-linux-x86_64
-            dropctl-macos-x86_64
-            dropctl-macos-arm64
-            dropctl-windows-x86_64.exe
-            dropctl-linux-x86_64.txt
-            dropctl-macos-x86_64.txt
-            dropctl-macos-arm64.txt
-            dropctl-windows-x86_64.txt
+            artifacts/dropctl-linux/dropctl-linux-x86_64
+            artifacts/dropctl-macos-x86_64/dropctl-macos-x86_64
+            artifacts/dropctl-macos-arm64/dropctl-macos-arm64
+            artifacts/dropctl-windows-x86_64/dropctl-windows-x86_64.exe
