@@ -13,39 +13,39 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_OUTPUT
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(date +'%Y.%m.%d.%H%M')
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create tag
-        id: tag
         run: |
-          TAG="v$(echo ${{ steps.date.outputs.date }})"
-          git tag $TAG
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Created tag: $TAG"
-
-      - name: Push tag
-        run: git push origin ${{ steps.tag.outputs.tag }}
+          git tag ${{ steps.version.outputs.version }}
+          git push origin ${{ steps.version.outputs.version }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build release
         run: |
-          cargo build --release
+          cargo build --release --locked
           strip target/release/dropctl
 
       - name: Create checksums
         run: sha256sum target/release/dropctl > checksums.txt
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Download artifacts
+        uses: softprops/action-gh-release@v2
         with:
-          name: dropctl ${{ steps.tag.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: dropctl ${{ steps.version.outputs.version }}
           body: |
-            ## dropctl ${{ steps.tag.outputs.tag }}
+            ## dropctl ${{ steps.version.outputs.version }}
             
             Automatic release from commit `${{ github.sha }}`
             
@@ -56,11 +56,6 @@ jobs:
             
             # Send file
             ./dropctl send 192.168.1.100:7777 file.zip
-            ```
-            
-            ### Checksums
-            ```
-            $(cat checksums.txt)
             ```
           files: |
             target/release/dropctl
